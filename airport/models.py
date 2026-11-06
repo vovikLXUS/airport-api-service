@@ -6,23 +6,26 @@ class Airport(models.Model):
     name = models.CharField(max_length=200)
     closest_big_city = models.CharField(max_length=200)
 
+    def __str__(self):
+        return f"{self.name} (in/near: {self.closest_big_city})"
+
 
 class Route(models.Model):
     source = models.ForeignKey(
         Airport,
         on_delete=models.CASCADE,
-        related_name="routes-from",
+        related_name="routes_from",
         null=False,
         blank=False
     )
     destination = models.ForeignKey(
         Airport,
         on_delete=models.CASCADE,
-        related_name="routes-to",
+        related_name="routes_to",
         null=False,
         blank=False
     )
-    distance = models.IntegerField()
+    distance = models.PositiveIntegerField()
 
     class Meta:
         verbose_name_plural = "routes"
