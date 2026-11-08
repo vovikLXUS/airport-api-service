@@ -1,3 +1,4 @@
+from django.db.models import prefetch_related_objects
 from django.shortcuts import render
 from rest_framework import viewsets, mixins
 from rest_framework.viewsets import GenericViewSet
@@ -20,7 +21,9 @@ from airport.serializers import (
     AirplaneSerializer,
     FlightSerializer,
     OrderSerializer,
-    TicketSerializer
+    TicketSerializer, RouteListSerializer, RouteRetrieveSerializer, CrewRetrieveSerializer, CrewListSerializer,
+    AirplaneListSerializer, AirplaneRetrieveSerializer, FlightListSerializer, FlightRetrieveSerializer,
+    TicketListSerializer, TicketRetrieveSerializer
 )
 
 
@@ -42,8 +45,21 @@ class RouteViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
-    queryset = Route.objects.all()
-    serializer_class = RouteSerializer
+    queryset = Route.objects.all().select_related()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return RouteListSerializer
+        elif self.action == "retrieve":
+            return RouteRetrieveSerializer
+        return RouteSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset
+
+        if self.action == "retrieve":
+            queryset = queryset.select_related("source", "destination")
+        return queryset
 
 
 class CrewViewSet(
@@ -54,7 +70,13 @@ class CrewViewSet(
     GenericViewSet
 ):
     queryset = Crew.objects.all()
-    serializer_class = CrewSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return CrewListSerializer
+        elif self.action == "retrieve":
+            return CrewRetrieveSerializer
+        return CrewSerializer
 
 
 class AirplaneTypeViewSet(
@@ -67,6 +89,13 @@ class AirplaneTypeViewSet(
     queryset = AirplaneType.objects.all()
     serializer_class = AirplaneTypeSerializer
 
+    def get_queryset(self):
+        queryset = self.queryset
+
+        if self.action == "retrieve":
+            queryset = queryset.select_related("airplane_type")
+        return queryset
+
 
 class AirplaneViewSet(
     mixins.CreateModelMixin,
@@ -76,7 +105,13 @@ class AirplaneViewSet(
     GenericViewSet
 ):
     queryset = Airplane.objects.all()
-    serializer_class = AirplaneSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return AirplaneListSerializer
+        elif self.action == "retrieve":
+            return AirplaneRetrieveSerializer
+        return AirplaneSerializer
 
 
 class FlightViewSet(
@@ -87,7 +122,26 @@ class FlightViewSet(
     GenericViewSet
 ):
     queryset = Flight.objects.all()
-    serializer_class = FlightSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return FlightListSerializer
+        elif self.action == "retrieve":
+            return FlightRetrieveSerializer
+        return FlightSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset
+
+        if self.action == "list":
+            queryset = queryset.prefetch_related("crew")
+        elif self.action == "retrieve":
+            queryset = queryset.select_related(
+                "airplane__airplane_type",
+                "route__source",
+                "route__destination",
+            ).prefetch_related("crew")
+        return queryset
 
 
 class OrderViewSet(
@@ -109,4 +163,22 @@ class TicketViewSet(
     GenericViewSet
 ):
     queryset = Ticket.objects.all()
-    serializer_class = TicketSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return TicketListSerializer
+        elif self.action == "retrieve":
+            return TicketRetrieveSerializer
+        return TicketSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset
+
+        if self.action == "retrieve":
+            queryset = queryset.select_related(
+                "order",
+                "flight__airplane__airplane_type",
+                "flight__route__source",
+                "flight__route__destination",
+            ).prefetch_related("flight__crew")
+        return queryset

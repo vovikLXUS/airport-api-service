@@ -41,8 +41,12 @@ class Crew(models.Model):
     first_name = models.CharField(max_length=200)
     last_name = models.CharField(max_length=200)
 
-    def __str__(self):
+    @property
+    def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    def __str__(self):
+        return self.full_name
 
 
 class AirplaneType(models.Model):
@@ -68,6 +72,10 @@ class Airplane(models.Model):
 
     class Meta:
         verbose_name_plural = "airplanes"
+
+    @property
+    def seats(self):
+        return self.rows * self.seats_in_row
 
     def __str__(self):
         return (
@@ -114,34 +122,24 @@ class Order(models.Model):
         verbose_name_plural = "orders"
         ordering = ["-created_at"]
 
+    def __str__(self):
+        return f"Order #{self.id}({self.user})"
+
 
 class Ticket(models.Model):
-    row = models.IntegerField(unique=True)
-    seat = models.IntegerField(unique=True)
-    flight = models.ForeignKey(
-        Flight,
-        on_delete=models.CASCADE,
-        related_name="tickets",
-        null=False,
-        blank=False
-    )
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.CASCADE,
-        related_name="tickets",
-        null=False,
-        blank=False
-    )
+    row = models.IntegerField()
+    seat = models.IntegerField()
+    flight = models.ForeignKey(Flight, on_delete=models.CASCADE, related_name="tickets")
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="tickets")
 
     class Meta:
-        verbose_name_plural = "tickets"
         constraints = [
-            models.UniqueConstraint(fields=[
-                "row", "seat", "flight", "order"
-            ],
-                name="unique_ticket_seat_trip")
+            models.UniqueConstraint(
+                fields=["flight", "row", "seat"],
+                name="unique_ticket_seat_per_flight",
+            )
         ]
-        ordering = ["seat"]
+        ordering = ["id"]
 
     def __str__(self):
         return (
