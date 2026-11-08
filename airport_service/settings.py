@@ -25,7 +25,7 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ["DEBUG"]
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 
 INTERNAL_IPS = [
