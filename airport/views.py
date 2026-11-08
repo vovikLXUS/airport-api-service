@@ -32,13 +32,20 @@ from airport.serializers import (
     FlightListSerializer,
     FlightRetrieveSerializer,
     TicketListSerializer,
-    TicketRetrieveSerializer,
+    TicketRetrieveSerializer
 )
 
 
-def params_to_ints(qs: str) -> list[int]:
-    """'1,3,5' -> [1, 3, 5]. Нечислові значення ігноруються."""
-    return [int(str_id) for str_id in qs.split(",") if str_id.strip().isdigit()]
+def params_to_ints(query_string):
+    """
+    Convert a string of format '1,2,3' to a list of integers [1, 2, 3].
+    Non-numeric values are ignored.
+    """
+    return [
+        int(str_id)
+        for str_id in query_string.split(",")
+        if str_id.strip().isdigit()
+    ]
 
 
 class AirportViewSet(
@@ -53,29 +60,26 @@ class AirportViewSet(
 
     def get_queryset(self):
         queryset = self.queryset
-
-        name = self.request.query_params.get("name")
         city = self.request.query_params.get("city")
-
-        if name:
-            queryset = queryset.filter(name__icontains=name)
+        name = self.request.query_params.get("name")
 
         if city:
             queryset = queryset.filter(closest_big_city__icontains=city)
-
+        if name:
+            queryset = queryset.filter(name__icontains=name)
         return queryset
 
     @extend_schema(
         parameters=[
             OpenApiParameter(
+                "city",
+                type=OpenApiTypes.STR,
+                description="Частина назви міста (ex. ?city=київ)",
+            ),
+            OpenApiParameter(
                 "name",
                 type=OpenApiTypes.STR,
                 description="Частина назви аеропорту (ex. ?name=бориспіль)",
-            ),
-            OpenApiParameter(
-                "city",
-                type=OpenApiTypes.STR,
-                description="Частина назви найближчого міста (ex. ?city=київ)",
             ),
         ]
     )
@@ -110,11 +114,11 @@ class RouteViewSet(
         max_distance = self.request.query_params.get("max_distance")
 
         if source:
-            queryset = queryset.filter(source_id__in=params_to_ints(source))
+            queryset = queryset.filter(source__id__in=params_to_ints(source))
 
         if destination:
             queryset = queryset.filter(
-                destination_id__in=params_to_ints(destination)
+                destination__id__in=params_to_ints(destination)
             )
 
         if from_city:
@@ -135,7 +139,6 @@ class RouteViewSet(
 
         if self.action == "retrieve":
             queryset = queryset.select_related("source", "destination")
-
         return queryset
 
     @extend_schema(
@@ -194,14 +197,12 @@ class CrewViewSet(
 
     def get_queryset(self):
         queryset = self.queryset
-
         name = self.request.query_params.get("name")
 
         if name:
             queryset = queryset.filter(
                 Q(first_name__icontains=name) | Q(last_name__icontains=name)
             )
-
         return queryset
 
     @extend_schema(
@@ -229,12 +230,10 @@ class AirplaneTypeViewSet(
 
     def get_queryset(self):
         queryset = self.queryset
-
         name = self.request.query_params.get("name")
 
         if name:
             queryset = queryset.filter(name__icontains=name)
-
         return queryset
 
     @extend_schema(
@@ -279,11 +278,11 @@ class AirplaneViewSet(
 
         if airplane_type:
             queryset = queryset.filter(
-                airplane_type_id__in=params_to_ints(airplane_type)
+                airplane_type__id__in=params_to_ints(airplane_type)
             )
 
         if min_seats or max_seats:
-            # seats — це @property, у БД такої колонки немає,
+            # seats - це @property, колонки в БД немає,
             # тому рахуємо її на боці бази через F()
             queryset = queryset.annotate(
                 total_seats=F("rows") * F("seats_in_row")
@@ -297,7 +296,6 @@ class AirplaneViewSet(
 
         if self.action == "retrieve":
             queryset = queryset.select_related("airplane_type")
-
         return queryset
 
     @extend_schema(
@@ -315,12 +313,12 @@ class AirplaneViewSet(
             OpenApiParameter(
                 "min_seats",
                 type=OpenApiTypes.INT,
-                description="Мінімальна кількість місць (ex. ?min_seats=200)",
+                description="Мінімум місць у літаку (ex. ?min_seats=200)",
             ),
             OpenApiParameter(
                 "max_seats",
                 type=OpenApiTypes.INT,
-                description="Максимальна кількість місць (ex. ?max_seats=400)",
+                description="Максимум місць у літаку (ex. ?max_seats=400)",
             ),
         ]
     )
@@ -347,7 +345,7 @@ class FlightViewSet(
     def get_queryset(self):
         queryset = self.queryset
 
-        route = self.request.query_params.get("route")
+        routes = self.request.query_params.get("routes")
         airplane_type = self.request.query_params.get("airplane_type")
         crew = self.request.query_params.get("crew")
         date = self.request.query_params.get("date")
@@ -357,12 +355,12 @@ class FlightViewSet(
         to_city = self.request.query_params.get("to_city")
         available = self.request.query_params.get("available")
 
-        if route:
-            queryset = queryset.filter(route_id__in=params_to_ints(route))
+        if routes:
+            queryset = queryset.filter(route__id__in=params_to_ints(routes))
 
         if airplane_type:
             queryset = queryset.filter(
-                airplane__airplane_type_id__in=params_to_ints(airplane_type)
+                airplane__airplane_type__id__in=params_to_ints(airplane_type)
             )
 
         if crew:
@@ -404,16 +402,14 @@ class FlightViewSet(
                 "route__source",
                 "route__destination",
             ).prefetch_related("crew")
-
-        # фільтр по crew — це M2M, джойн може продублювати рейси
         return queryset.distinct()
 
     @extend_schema(
         parameters=[
             OpenApiParameter(
-                "route",
+                "routes",
                 type={"type": "array", "items": {"type": "number"}},
-                description="Id маршрутів (ex. ?route=2,5)",
+                description="Id маршрутів (ex. ?routes=2,5)",
             ),
             OpenApiParameter(
                 "airplane_type",
@@ -472,7 +468,7 @@ class OrderViewSet(
     serializer_class = OrderSerializer
 
     def get_queryset(self):
-        queryset = self.queryset
+        queryset = self.queryset.filter(user=self.request.user)
 
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
@@ -484,6 +480,9 @@ class OrderViewSet(
             queryset = queryset.filter(created_at__date__lte=date_to)
 
         return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     @extend_schema(
         parameters=[
@@ -526,10 +525,10 @@ class TicketViewSet(
         order = self.request.query_params.get("order")
 
         if flight:
-            queryset = queryset.filter(flight_id__in=params_to_ints(flight))
+            queryset = queryset.filter(flight__id__in=params_to_ints(flight))
 
         if order:
-            queryset = queryset.filter(order_id__in=params_to_ints(order))
+            queryset = queryset.filter(order__id__in=params_to_ints(order))
 
         if self.action == "retrieve":
             queryset = queryset.select_related(
@@ -538,7 +537,6 @@ class TicketViewSet(
                 "flight__route__source",
                 "flight__route__destination",
             ).prefetch_related("flight__crew")
-
         return queryset
 
     @extend_schema(

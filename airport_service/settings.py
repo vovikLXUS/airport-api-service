@@ -159,6 +159,19 @@ REST_FRAMEWORK = {
     }
 }
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Airport service API",
+    "DESCRIPTION": "Order tickets for your flights",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SWAGGED_UI_SETTINGS": {
+        "deepLinking": True,
+        "defaultModelRendering": "model",
+        "defaultModelsExpandDepth": 2,
+        "defaultModelExpandDepth": 2,
+    },
+}
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=3),

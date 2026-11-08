@@ -100,19 +100,39 @@ class FlightSerializer(serializers.ModelSerializer):
 
 
 class FlightListSerializer(FlightSerializer):
+    # значення приходить з annotate() у FlightViewSet.get_queryset
+    tickets_available = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Flight
-        fields = ["id", "route", "airplane", "crew"]
+        fields = [
+            "id",
+            "route",
+            "airplane",
+            "departure_time",
+            "arrival_time",
+            "crew",
+            "tickets_available",
+        ]
 
 
 class FlightRetrieveSerializer(FlightSerializer):
     airplane = AirplaneRetrieveSerializer(read_only=True)
     crew = CrewRetrieveSerializer(many=True, read_only=True)
     route = RouteRetrieveSerializer(read_only=True)
+    tickets_available = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Flight
-        fields = ["id", "route", "airplane", "departure_time", "arrival_time", "crew"]
+        fields = [
+            "id",
+            "route",
+            "airplane",
+            "departure_time",
+            "arrival_time",
+            "crew",
+            "tickets_available",
+        ]
 
 
 class OrderSerializer(serializers.ModelSerializer):
