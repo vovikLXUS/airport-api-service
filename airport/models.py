@@ -6,9 +6,19 @@ from django.db import models
 from django.utils.text import slugify
 
 
-def image_path(instance, filename: str) -> pathlib.Path:
-    filename = f"{slugify(instance.name)}-{uuid.uuid4()}" + pathlib.Path(filename).suffix
-    return pathlib.Path(f"upload/{instance._meta.model_name}/{filename}") / pathlib.Path(filename)
+def image_path(instance, filename: str) -> str:
+    """
+    Build an upload path: upload/<model_name>/<slug>-<uuid><extension>
+
+    Returns a string with forward slashes: Django stores this value in the
+    database and serves it as part of a URL, so the separator must not
+    depend on the operating system.
+    """
+    extension = pathlib.Path(filename).suffix
+    slug = slugify(instance.name, allow_unicode=True) or instance._meta.model_name
+    filename = f"{slug}-{uuid.uuid4()}{extension}"
+
+    return f"upload/{instance._meta.model_name}/{filename}"
 
 
 class Airport(models.Model):
