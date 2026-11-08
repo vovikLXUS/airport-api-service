@@ -23,7 +23,7 @@ class AirplaneSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Airplane
-        fields = ["id", "name", "seats"]
+        fields = ["id", "name", "seats", "image"]
 
 
 class AirplaneListSerializer(AirplaneSerializer):
@@ -31,7 +31,7 @@ class AirplaneListSerializer(AirplaneSerializer):
 
     class Meta:
         model = Airplane
-        fields = ["id", "name", "seats"]
+        fields = ["id", "name", "seats", "image"]
 
 
 class AirplaneRetrieveSerializer(AirplaneListSerializer):
@@ -39,13 +39,25 @@ class AirplaneRetrieveSerializer(AirplaneListSerializer):
 
     class Meta:
         model = Airplane
-        fields = ["id", "name", "seats", "rows", "seats_in_row", "airplane_type"]
+        fields = ["id", "name", "seats", "rows", "seats_in_row", "airplane_type", "image"]
+
+
+class AirplaneImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Airplane
+        fields = ["id", "image"]
 
 
 class AirportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Airport
-        fields = ["id", "name", "closest_big_city"]
+        fields = ["id", "name", "closest_big_city", "image"]
+
+
+class AirportImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Airport
+        fields = ["id", "image"]
 
 
 class RouteSerializer(serializers.ModelSerializer):
@@ -100,7 +112,7 @@ class FlightSerializer(serializers.ModelSerializer):
 
 
 class FlightListSerializer(FlightSerializer):
-    # значення приходить з annotate() у FlightViewSet.get_queryset
+    # the value comes from annotate() in FlightViewSet.get_queryset
     tickets_available = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -156,6 +168,16 @@ class TicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ticket
         fields = ["id", "row", "seat", "flight", "order"]
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        Ticket.validate_seat(
+            attrs["row"],
+            attrs["seat"],
+            attrs["flight"].airplane,
+            serializers.ValidationError,
+        )
+        return data
 
 
 class TicketListSerializer(TicketSerializer):

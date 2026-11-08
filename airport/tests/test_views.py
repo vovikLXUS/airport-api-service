@@ -31,7 +31,7 @@ TICKET_URL = reverse("airport:ticket-list")
 
 
 def results(response) -> list:
-    """Відповіді посторінкові (LimitOffsetPagination)."""
+    """Responses are paginated (LimitOffsetPagination)."""
     return response.data["results"]
 
 
@@ -44,7 +44,7 @@ def ids(response) -> list:
 
 
 class ParamsToIntsTests(TestCase):
-    """Хелпер для розбору параметрів виду ?routes=1,2,3."""
+    """Helper that parses parameters like ?routes=1,2,3."""
 
     def test_converts_comma_separated_string(self):
         self.assertEqual(params_to_ints("1,2,3"), [1, 2, 3])
@@ -60,7 +60,7 @@ class ParamsToIntsTests(TestCase):
 
 
 class UnauthenticatedApiTests(TestCase):
-    """Без токена закриті всі ендпоінти airport-service."""
+    """Every airport-service endpoint is closed without a token."""
 
     def setUp(self):
         cache.clear()
@@ -86,7 +86,7 @@ class UnauthenticatedApiTests(TestCase):
 
 
 class PermissionApiTests(TestCase):
-    """Звичайний користувач читає, адмін — пише."""
+    """A regular user can read, an admin can write."""
 
     def setUp(self):
         cache.clear()
@@ -331,13 +331,13 @@ class AirplaneFilterTests(TestCase):
             rows=20,
             seats_in_row=4,
             airplane_type=self.narrow,
-        )  # 80 місць
+        )  # 80 seats
         self.big = Airplane.objects.create(
             name="Boeing 777-300ER",
             rows=44,
             seats_in_row=10,
             airplane_type=self.wide,
-        )  # 440 місць
+        )  # 440 seats
 
     def test_filter_by_name(self):
         response = self.client.get(AIRPLANE_URL, {"name": "boeing"})
@@ -416,10 +416,10 @@ class FlightViewSetTests(TestCase):
         self.wide = AirplaneType.objects.create(name="Wide-body")
         self.tiny = Airplane.objects.create(
             name="Cessna", rows=2, seats_in_row=2, airplane_type=self.narrow
-        )  # 4 місця
+        )  # 4 seats
         self.jumbo = Airplane.objects.create(
             name="Airbus A380", rows=10, seats_in_row=10, airplane_type=self.wide
-        )  # 100 місць
+        )  # 100 seats
 
         self.crew_member = Crew.objects.create(
             first_name="Olga", last_name="Shevchenko"
@@ -623,6 +623,13 @@ class OrderViewSetTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_regular_user_can_create_order(self):
+        self.client.force_authenticate(self.other)
+
+        response = self.client.post(ORDER_URL, {"user": self.other.id})
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
     def test_create_assigns_current_user(self):
         response = self.client.post(ORDER_URL, {"user": self.other.id})
 
@@ -721,6 +728,33 @@ class TicketFilterTests(TestCase):
         )
 
         self.assertIsInstance(results(response)[0]["flight"], int)
+
+    def test_create_with_seat_out_of_range_returns_400(self):
+        response = self.client.post(
+            TICKET_URL,
+            {
+                "row": 99,
+                "seat": 1,
+                "flight": self.first_flight.id,
+                "order": self.first_order.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("row", response.data)
+
+    def test_authenticated_user_can_create_ticket(self):
+        response = self.client.post(
+            TICKET_URL,
+            {
+                "row": 5,
+                "seat": 5,
+                "flight": self.first_flight.id,
+                "order": self.first_order.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_retrieve_returns_nested_flight_and_order(self):
         response = self.client.get(

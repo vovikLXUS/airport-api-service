@@ -2,7 +2,7 @@ import pathlib
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -65,7 +65,7 @@ def sample_flight(**params) -> Flight:
 
 
 class ImagePathTests(TestCase):
-    """image_path() — кастомна функція формування шляху для ImageField."""
+    """image_path() is the custom upload path builder for ImageField."""
 
     def test_path_starts_with_upload_and_model_name(self):
         airplane = sample_airplane(name="Boeing 737-800")
@@ -142,7 +142,7 @@ class ImagePathTests(TestCase):
 
 
 class AirplaneModelTests(TestCase):
-    """seats — обчислювана властивість, якої немає в БД."""
+    """seats is a computed property with no column in the database."""
 
     def test_seats_is_rows_multiplied_by_seats_in_row(self):
         airplane = sample_airplane(rows=10, seats_in_row=6)
@@ -164,7 +164,7 @@ class AirplaneModelTests(TestCase):
 
 
 class CrewModelTests(TestCase):
-    """full_name — кастомна властивість, яку використовує серіалайзер."""
+    """full_name is a custom property used by the serializer."""
 
     def test_full_name(self):
         crew = Crew.objects.create(first_name="Olga", last_name="Shevchenko")
@@ -271,11 +271,50 @@ class TicketModelTests(TestCase):
             row=3, seat=4, flight=self.flight, order=self.order
         )
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Ticket.objects.create(
-                    row=3, seat=4, flight=self.flight, order=self.order
-                )
+        with self.assertRaises(ValidationError):
+            Ticket.objects.create(
+                row=3, seat=4, flight=self.flight, order=self.order
+            )
+
+    def test_row_above_airplane_rows_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            Ticket.objects.create(
+                row=99, seat=1, flight=self.flight, order=self.order
+            )
+
+    def test_seat_above_seats_in_row_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            Ticket.objects.create(
+                row=1, seat=99, flight=self.flight, order=self.order
+            )
+
+    def test_zero_and_negative_values_are_rejected(self):
+        for row, seat in ((0, 1), (1, 0), (-1, 1)):
+            with self.subTest(row=row, seat=seat):
+                with self.assertRaises(ValidationError):
+                    Ticket.objects.create(
+                        row=row, seat=seat, flight=self.flight, order=self.order
+                    )
+
+    def test_boundary_values_are_allowed(self):
+        airplane = self.flight.airplane
+
+        ticket = Ticket.objects.create(
+            row=airplane.rows,
+            seat=airplane.seats_in_row,
+            flight=self.flight,
+            order=self.order,
+        )
+
+        self.assertIsNotNone(ticket.id)
+
+    def test_error_message_names_the_wrong_field(self):
+        with self.assertRaises(ValidationError) as context:
+            Ticket.objects.create(
+                row=99, seat=1, flight=self.flight, order=self.order
+            )
+
+        self.assertIn("row", context.exception.message_dict)
 
     def test_same_seat_on_another_flight_is_allowed(self):
         other_flight = sample_flight()

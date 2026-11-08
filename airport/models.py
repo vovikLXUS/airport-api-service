@@ -2,6 +2,7 @@ import pathlib
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
@@ -164,6 +165,32 @@ class Ticket(models.Model):
             )
         ]
         ordering = ["id"]
+
+    @staticmethod
+    def validate_seat(row: int, seat: int, airplane, error_to_raise):
+        """Check that the row and the seat exist in the given airplane."""
+        for value, attr_name, limit in (
+            (row, "row", airplane.rows),
+            (seat, "seat", airplane.seats_in_row),
+        ):
+            if not 1 <= value <= limit:
+                raise error_to_raise(
+                    {
+                        attr_name: (
+                            f"{attr_name} must be in range [1, {limit}], "
+                            f"got {value}"
+                        )
+                    }
+                )
+
+    def clean(self):
+        Ticket.validate_seat(
+            self.row, self.seat, self.flight.airplane, ValidationError
+        )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return (
