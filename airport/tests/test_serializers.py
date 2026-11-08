@@ -30,7 +30,7 @@ from airport.serializers import (
 
 
 class AirplaneSerializersTests(TestCase):
-    """Обчислюване поле seats і вкладений airplane_type."""
+    """Computed seats field and the nested airplane_type."""
 
     def setUp(self):
         self.airplane_type = AirplaneType.objects.create(name="Narrow-body")

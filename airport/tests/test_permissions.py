@@ -8,9 +8,8 @@ from airport.permissions import IsAdminAllOrIsAuthenticatedReadOnly
 
 class IsAdminAllOrIsAuthenticatedReadOnlyTests(TestCase):
     """
-    Кастомний клас прав:
-    адмін — повний доступ, звичайний користувач — лише читання,
-    анонім — нічого.
+    Custom permission class: an admin has full access,
+    an authenticated user can only read, anonymous clients get nothing.
     """
 
     def setUp(self):

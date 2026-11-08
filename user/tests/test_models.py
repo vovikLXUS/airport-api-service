@@ -4,7 +4,7 @@ from django.test import TestCase
 
 
 class UserManagerTests(TestCase):
-    """Кастомний менеджер: email замість username."""
+    """Custom manager: email instead of username."""
 
     def setUp(self):
         self.model = get_user_model()
@@ -78,7 +78,7 @@ class UserManagerTests(TestCase):
 
 
 class UserModelTests(TestCase):
-    """Поле username прибране, автентифікація — за email."""
+    """The username field is removed, authentication goes by email."""
 
     def setUp(self):
         self.model = get_user_model()

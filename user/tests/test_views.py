@@ -13,7 +13,7 @@ TOKEN_VERIFY_URL = reverse("user:token_verify")
 
 
 class CreateUserViewTests(TestCase):
-    """Реєстрація відкрита для всіх (permission_classes = ())."""
+    """Registration is open to everyone (permission_classes = ())."""
 
     def setUp(self):
         cache.clear()
@@ -68,7 +68,7 @@ class CreateUserViewTests(TestCase):
 
 
 class ManageUserViewTests(TestCase):
-    """/me/ повертає профіль власника токена."""
+    """/me/ returns the profile of the token owner."""
 
     def setUp(self):
         cache.clear()
@@ -127,7 +127,7 @@ class ManageUserViewTests(TestCase):
 
 
 class JWTAuthTests(TestCase):
-    """Логін за email замість username."""
+    """Login by email instead of username."""
 
     def setUp(self):
         cache.clear()
