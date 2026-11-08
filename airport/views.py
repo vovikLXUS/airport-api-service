@@ -1,6 +1,10 @@
 from django.db.models import Count, F, Q
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import mixins
 from rest_framework.viewsets import GenericViewSet
 
@@ -35,6 +39,8 @@ from airport.serializers import (
     TicketRetrieveSerializer
 )
 
+ADMIN_ONLY = "Доступно лише адміністратору (is_staff)."
+
 
 def params_to_ints(query_string):
     """
@@ -48,6 +54,36 @@ def params_to_ints(query_string):
     ]
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список аеропортів",
+        description=(
+            "Аеропорти з назвою та найближчим великим містом. "
+            "Підтримує пошук за підрядком у назві та в місті."
+        ),
+        parameters=[
+            OpenApiParameter(
+                "city",
+                type=OpenApiTypes.STR,
+                description="Частина назви міста (ex. ?city=київ)",
+            ),
+            OpenApiParameter(
+                "name",
+                type=OpenApiTypes.STR,
+                description="Частина назви аеропорту (ex. ?name=бориспіль)",
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Аеропорт за id",
+        description="Детальна інформація про один аеропорт.",
+    ),
+    create=extend_schema(summary="Створити аеропорт", description=ADMIN_ONLY),
+    update=extend_schema(summary="Оновити аеропорт", description=ADMIN_ONLY),
+    partial_update=extend_schema(
+        summary="Частково оновити аеропорт", description=ADMIN_ONLY
+    ),
+)
 class AirportViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -55,6 +91,8 @@ class AirportViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Довідник аеропортів."""
+
     queryset = Airport.objects.all().order_by("id")
     serializer_class = AirportSerializer
 
@@ -69,24 +107,61 @@ class AirportViewSet(
             queryset = queryset.filter(name__icontains=name)
         return queryset
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список маршрутів",
+        description=(
+            "Маршрути між парами аеропортів із відстанню в кілометрах. "
+            "У списку аеропорти подані як id; "
+            "повні об'єкти — у відповіді на retrieve."
+        ),
         parameters=[
             OpenApiParameter(
-                "city",
-                type=OpenApiTypes.STR,
-                description="Частина назви міста (ex. ?city=київ)",
+                "source",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id аеропортів відправлення (ex. ?source=3,5)",
             ),
             OpenApiParameter(
-                "name",
-                type=OpenApiTypes.STR,
-                description="Частина назви аеропорту (ex. ?name=бориспіль)",
+                "destination",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id аеропортів призначення (ex. ?destination=8)",
             ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+            OpenApiParameter(
+                "from_city",
+                type=OpenApiTypes.STR,
+                description="Місто відправлення (ex. ?from_city=київ)",
+            ),
+            OpenApiParameter(
+                "to_city",
+                type=OpenApiTypes.STR,
+                description="Місто призначення (ex. ?to_city=frankfurt)",
+            ),
+            OpenApiParameter(
+                "min_distance",
+                type=OpenApiTypes.INT,
+                description="Мінімальна відстань, км (ex. ?min_distance=1000)",
+            ),
+            OpenApiParameter(
+                "max_distance",
+                type=OpenApiTypes.INT,
+                description="Максимальна відстань, км (ex. ?max_distance=3000)",
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Маршрут за id",
+        description=(
+            "Маршрут із розгорнутими об'єктами аеропортів "
+            "відправлення та призначення."
+        ),
+    ),
+    create=extend_schema(summary="Створити маршрут", description=ADMIN_ONLY),
+    update=extend_schema(summary="Оновити маршрут", description=ADMIN_ONLY),
+    partial_update=extend_schema(
+        summary="Частково оновити маршрут", description=ADMIN_ONLY
+    ),
+)
 class RouteViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -94,6 +169,8 @@ class RouteViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Маршрути між аеропортами."""
+
     queryset = Route.objects.all().order_by("id")
 
     def get_serializer_class(self):
@@ -141,44 +218,36 @@ class RouteViewSet(
             queryset = queryset.select_related("source", "destination")
         return queryset
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список екіпажу",
+        description=(
+            "Скорочений перелік членів екіпажу. "
+            "Пошук за ім'ям шукає збіг і в імені, і в прізвищі."
+        ),
         parameters=[
             OpenApiParameter(
-                "source",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id аеропортів відправлення (ex. ?source=3,5)",
-            ),
-            OpenApiParameter(
-                "destination",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id аеропортів призначення (ex. ?destination=8)",
-            ),
-            OpenApiParameter(
-                "from_city",
+                "name",
                 type=OpenApiTypes.STR,
-                description="Місто відправлення (ex. ?from_city=київ)",
+                description="Частина імені або прізвища (ex. ?name=kov)",
             ),
-            OpenApiParameter(
-                "to_city",
-                type=OpenApiTypes.STR,
-                description="Місто призначення (ex. ?to_city=frankfurt)",
-            ),
-            OpenApiParameter(
-                "min_distance",
-                type=OpenApiTypes.INT,
-                description="Мінімальна відстань, км (ex. ?min_distance=1000)",
-            ),
-            OpenApiParameter(
-                "max_distance",
-                type=OpenApiTypes.INT,
-                description="Максимальна відстань, км (ex. ?max_distance=3000)",
-            ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Член екіпажу за id",
+        description="Повертає повне ім'я (first_name + last_name).",
+    ),
+    create=extend_schema(
+        summary="Додати члена екіпажу", description=ADMIN_ONLY
+    ),
+    update=extend_schema(
+        summary="Оновити члена екіпажу", description=ADMIN_ONLY
+    ),
+    partial_update=extend_schema(
+        summary="Частково оновити члена екіпажу", description=ADMIN_ONLY
+    ),
+)
 class CrewViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -186,6 +255,8 @@ class CrewViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Члени екіпажу, яких призначають на рейси."""
+
     queryset = Crew.objects.all().order_by("id")
 
     def get_serializer_class(self):
@@ -205,19 +276,26 @@ class CrewViewSet(
             )
         return queryset
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список типів літаків",
+        description="Категорії літаків: narrow-body, wide-body, regional тощо.",
         parameters=[
             OpenApiParameter(
                 "name",
                 type=OpenApiTypes.STR,
-                description="Частина імені або прізвища (ex. ?name=kov)",
+                description="Частина назви типу (ex. ?name=wide)",
             ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+        ],
+    ),
+    retrieve=extend_schema(summary="Тип літака за id"),
+    create=extend_schema(summary="Створити тип літака", description=ADMIN_ONLY),
+    update=extend_schema(summary="Оновити тип літака", description=ADMIN_ONLY),
+    partial_update=extend_schema(
+        summary="Частково оновити тип літака", description=ADMIN_ONLY
+    ),
+)
 class AirplaneTypeViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -225,6 +303,8 @@ class AirplaneTypeViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Довідник типів літаків."""
+
     queryset = AirplaneType.objects.all().order_by("id")
     serializer_class = AirplaneTypeSerializer
 
@@ -236,19 +316,50 @@ class AirplaneTypeViewSet(
             queryset = queryset.filter(name__icontains=name)
         return queryset
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список літаків",
+        description=(
+            "Літаки з обчисленою місткістю (seats = rows × seats_in_row). "
+            "Фільтри за місткістю працюють на боці БД."
+        ),
         parameters=[
             OpenApiParameter(
                 "name",
                 type=OpenApiTypes.STR,
-                description="Частина назви типу (ex. ?name=wide)",
+                description="Частина назви літака (ex. ?name=boeing)",
             ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+            OpenApiParameter(
+                "airplane_type",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id типів літака (ex. ?airplane_type=1,2)",
+            ),
+            OpenApiParameter(
+                "min_seats",
+                type=OpenApiTypes.INT,
+                description="Мінімум місць у літаку (ex. ?min_seats=200)",
+            ),
+            OpenApiParameter(
+                "max_seats",
+                type=OpenApiTypes.INT,
+                description="Максимум місць у літаку (ex. ?max_seats=400)",
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Літак за id",
+        description=(
+            "Детальна картка: кількість рядів, місць у ряду "
+            "та розгорнутий тип літака."
+        ),
+    ),
+    create=extend_schema(summary="Створити літак", description=ADMIN_ONLY),
+    update=extend_schema(summary="Оновити літак", description=ADMIN_ONLY),
+    partial_update=extend_schema(
+        summary="Частково оновити літак", description=ADMIN_ONLY
+    ),
+)
 class AirplaneViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -256,6 +367,8 @@ class AirplaneViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Парк літаків."""
+
     queryset = Airplane.objects.all().order_by("id")
 
     def get_serializer_class(self):
@@ -298,34 +411,77 @@ class AirplaneViewSet(
             queryset = queryset.select_related("airplane_type")
         return queryset
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список рейсів",
+        description=(
+            "Рейси з полем tickets_available — скільки місць ще вільно "
+            "(місткість літака мінус продані квитки). "
+            "Фільтри можна комбінувати: "
+            "?from_city=київ&date_from=2026-11-10&available=true"
+        ),
         parameters=[
             OpenApiParameter(
-                "name",
-                type=OpenApiTypes.STR,
-                description="Частина назви літака (ex. ?name=boeing)",
+                "routes",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id маршрутів (ex. ?routes=2,5)",
             ),
             OpenApiParameter(
                 "airplane_type",
                 type={"type": "array", "items": {"type": "number"}},
-                description="Id типів літака (ex. ?airplane_type=1,2)",
+                description="Id типів літака (ex. ?airplane_type=2)",
             ),
             OpenApiParameter(
-                "min_seats",
-                type=OpenApiTypes.INT,
-                description="Мінімум місць у літаку (ex. ?min_seats=200)",
+                "crew",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id членів екіпажу (ex. ?crew=5,18)",
             ),
             OpenApiParameter(
-                "max_seats",
-                type=OpenApiTypes.INT,
-                description="Максимум місць у літаку (ex. ?max_seats=400)",
+                "date",
+                type=OpenApiTypes.DATE,
+                description="Точна дата вильоту (ex. ?date=2026-11-12)",
             ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+            OpenApiParameter(
+                "date_from",
+                type=OpenApiTypes.DATE,
+                description="Виліт не раніше (ex. ?date_from=2026-11-10)",
+            ),
+            OpenApiParameter(
+                "date_to",
+                type=OpenApiTypes.DATE,
+                description="Виліт не пізніше (ex. ?date_to=2026-11-15)",
+            ),
+            OpenApiParameter(
+                "from_city",
+                type=OpenApiTypes.STR,
+                description="Місто відправлення (ex. ?from_city=київ)",
+            ),
+            OpenApiParameter(
+                "to_city",
+                type=OpenApiTypes.STR,
+                description="Місто призначення (ex. ?to_city=seoul)",
+            ),
+            OpenApiParameter(
+                "available",
+                type=OpenApiTypes.BOOL,
+                description="Лише рейси з вільними місцями (ex. ?available=true)",
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Рейс за id",
+        description=(
+            "Повна картка рейсу: розгорнутий маршрут із аеропортами, "
+            "літак із типом, склад екіпажу та кількість вільних місць."
+        ),
+    ),
+    create=extend_schema(summary="Створити рейс", description=ADMIN_ONLY),
+    update=extend_schema(summary="Оновити рейс", description=ADMIN_ONLY),
+    partial_update=extend_schema(
+        summary="Частково оновити рейс", description=ADMIN_ONLY
+    ),
+)
 class FlightViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -333,6 +489,8 @@ class FlightViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Рейси: маршрут + літак + час вильоту та прильоту."""
+
     queryset = Flight.objects.all().order_by("departure_time")
 
     def get_serializer_class(self):
@@ -385,17 +543,24 @@ class FlightViewSet(
                 route__destination__closest_big_city__icontains=to_city
             )
 
-        if available and available.lower() in ("true", "1", "yes"):
+        if self.action in ("list", "retrieve"):
+            # вільні місця = місткість літака - кількість проданих квитків;
+            # distinct=True потрібен, бо фільтр по crew (M2M) дублює рядки
             queryset = queryset.annotate(
                 tickets_available=(
                     F("airplane__rows")
                     * F("airplane__seats_in_row")
-                    - Count("tickets")
+                    - Count("tickets", distinct=True)
                 )
-            ).filter(tickets_available__gt=0)
+            )
+
+            if available and available.lower() in ("true", "1", "yes"):
+                queryset = queryset.filter(tickets_available__gt=0)
 
         if self.action == "list":
-            queryset = queryset.prefetch_related("crew")
+            queryset = queryset.select_related(
+                "route", "airplane"
+            ).prefetch_related("crew")
         elif self.action == "retrieve":
             queryset = queryset.select_related(
                 "airplane__airplane_type",
@@ -404,59 +569,41 @@ class FlightViewSet(
             ).prefetch_related("crew")
         return queryset.distinct()
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Мої замовлення",
+        description=(
+            "Повертає лише замовлення поточного користувача. "
+            "Чужі замовлення недоступні навіть адміністратору через API."
+        ),
         parameters=[
-            OpenApiParameter(
-                "routes",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id маршрутів (ex. ?routes=2,5)",
-            ),
-            OpenApiParameter(
-                "airplane_type",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id типів літака (ex. ?airplane_type=2)",
-            ),
-            OpenApiParameter(
-                "crew",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id членів екіпажу (ex. ?crew=5,18)",
-            ),
-            OpenApiParameter(
-                "date",
-                type=OpenApiTypes.DATE,
-                description="Точна дата вильоту (ex. ?date=2026-11-12)",
-            ),
             OpenApiParameter(
                 "date_from",
                 type=OpenApiTypes.DATE,
-                description="Виліт не раніше (ex. ?date_from=2026-11-10)",
+                description="Створені не раніше (ex. ?date_from=2026-11-01)",
             ),
             OpenApiParameter(
                 "date_to",
                 type=OpenApiTypes.DATE,
-                description="Виліт не пізніше (ex. ?date_to=2026-11-15)",
+                description="Створені не пізніше (ex. ?date_to=2026-11-30)",
             ),
-            OpenApiParameter(
-                "from_city",
-                type=OpenApiTypes.STR,
-                description="Місто відправлення (ex. ?from_city=київ)",
-            ),
-            OpenApiParameter(
-                "to_city",
-                type=OpenApiTypes.STR,
-                description="Місто призначення (ex. ?to_city=seoul)",
-            ),
-            OpenApiParameter(
-                "available",
-                type=OpenApiTypes.BOOL,
-                description="Лише рейси з вільними місцями (ex. ?available=true)",
-            ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Замовлення за id",
+        description="Доступне, лише якщо замовлення належить поточному користувачу.",
+    ),
+    create=extend_schema(
+        summary="Створити замовлення",
+        description=(
+            "Поле user заповнюється автоматично з токена — "
+            "передавати його в тілі запиту не потрібно."
+        ),
+    ),
+    update=extend_schema(summary="Оновити замовлення"),
+    partial_update=extend_schema(summary="Частково оновити замовлення"),
+)
 class OrderViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -464,6 +611,8 @@ class OrderViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Замовлення поточного користувача."""
+
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
 
@@ -484,24 +633,36 @@ class OrderViewSet(
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    @extend_schema(
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список квитків",
+        description=(
+            "Квитки з номером ряду та місця. "
+            "Пара (рейс, ряд, місце) унікальна: "
+            "одне місце не можна продати двічі на один рейс."
+        ),
         parameters=[
             OpenApiParameter(
-                "date_from",
-                type=OpenApiTypes.DATE,
-                description="Створені не раніше (ex. ?date_from=2026-11-01)",
+                "flight",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id рейсів (ex. ?flight=14,23)",
             ),
             OpenApiParameter(
-                "date_to",
-                type=OpenApiTypes.DATE,
-                description="Створені не пізніше (ex. ?date_to=2026-11-30)",
+                "order",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Id замовлень (ex. ?order=3)",
             ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Квиток за id",
+        description="Квиток із розгорнутими даними рейсу та замовлення.",
+    ),
+    create=extend_schema(summary="Створити квиток"),
+    update=extend_schema(summary="Оновити квиток"),
+    partial_update=extend_schema(summary="Частково оновити квиток"),
+)
 class TicketViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -509,6 +670,8 @@ class TicketViewSet(
     mixins.ListModelMixin,
     GenericViewSet
 ):
+    """Квитки: місце на конкретному рейсі в межах замовлення."""
+
     queryset = Ticket.objects.all()
 
     def get_serializer_class(self):
@@ -538,20 +701,3 @@ class TicketViewSet(
                 "flight__route__destination",
             ).prefetch_related("flight__crew")
         return queryset
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                "flight",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id рейсів (ex. ?flight=14,23)",
-            ),
-            OpenApiParameter(
-                "order",
-                type={"type": "array", "items": {"type": "number"}},
-                description="Id замовлень (ex. ?order=3)",
-            ),
-        ]
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
