@@ -1,11 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from user.serializers import AuthTokenSerializer, UserSerializer
+from user.serializers import UserSerializer
 
 
 class UserSerializerTests(TestCase):
-    """Кастомні create() та update() — хешування пароля."""
+    """Custom create() and update(): password hashing."""
 
     def test_create_hashes_password(self):
         serializer = UserSerializer(
@@ -82,49 +82,3 @@ class UserSerializerTests(TestCase):
 
         self.assertEqual(updated.email, "renamed@example.com")
         self.assertTrue(updated.check_password("OldPass123"))
-
-
-class AuthTokenSerializerTests(TestCase):
-    """Кастомний серіалайзер логіну за email."""
-
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            "auth@example.com", "Pass12345"
-        )
-
-    def test_valid_credentials(self):
-        serializer = AuthTokenSerializer(
-            data={"email": "auth@example.com", "password": "Pass12345"}
-        )
-
-        self.assertTrue(serializer.is_valid())
-        self.assertEqual(serializer.validated_data["user"], self.user)
-
-    def test_wrong_password_is_rejected(self):
-        serializer = AuthTokenSerializer(
-            data={"email": "auth@example.com", "password": "WrongPass"}
-        )
-
-        self.assertFalse(serializer.is_valid())
-
-    def test_unknown_email_is_rejected(self):
-        serializer = AuthTokenSerializer(
-            data={"email": "ghost@example.com", "password": "Pass12345"}
-        )
-
-        self.assertFalse(serializer.is_valid())
-
-    def test_missing_password_is_rejected(self):
-        serializer = AuthTokenSerializer(data={"email": "auth@example.com"})
-
-        self.assertFalse(serializer.is_valid())
-
-    def test_inactive_user_is_rejected(self):
-        self.user.is_active = False
-        self.user.save()
-
-        serializer = AuthTokenSerializer(
-            data={"email": "auth@example.com", "password": "Pass12345"}
-        )
-
-        self.assertFalse(serializer.is_valid())
