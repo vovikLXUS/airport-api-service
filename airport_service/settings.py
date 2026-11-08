@@ -27,6 +27,7 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ["DEBUG"]
 
+
 INTERNAL_IPS = [
     "127.0.0.1",
     "localhost",
@@ -41,9 +42,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "debug_toolbar",
     "rest_framework",
-    "rest_framework.authtoken",
     "drf_spectacular",
     "airport",
     "user",
@@ -57,8 +56,11 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware"
 ]
+
+if DEBUG:
+    INSTALLED_APPS += ["debug_toolbar"]
+    MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]
 
 ROOT_URLCONF = "airport_service.urls"
 
@@ -85,8 +87,12 @@ WSGI_APPLICATION = "airport_service.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ["POSTGRES_DB"],
+        "USER": os.environ["POSTGRES_USER"],
+        "PASSWORD": os.environ["POSTGRES_PASSWORD"],
+        "HOST": os.environ["POSTGRES_HOST"],
+        "PORT": os.environ["POSTGRES_PORT"],
     }
 }
 
@@ -129,15 +135,9 @@ AUTH_USER_MODEL = "user.User"
 
 STATIC_URL = "static/"
 
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = os.environ.get("MEDIA_ROOT", BASE_DIR / "media")
 
 MEDIA_URL = "/media/"
-
-MAILERS = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
-}
 
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
@@ -164,7 +164,7 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Order tickets for your flights",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    "SWAGGED_UI_SETTINGS": {
+    "SWAGGER_UI_SETTINGS": {
         "deepLinking": True,
         "defaultModelRendering": "model",
         "defaultModelsExpandDepth": 2,
