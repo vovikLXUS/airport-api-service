@@ -1,10 +1,23 @@
+import pathlib
+import uuid
+
 from django.conf import settings
 from django.db import models
+from django.utils.text import slugify
+
+
+def image_path(instance, filename: str) -> pathlib.Path:
+    filename = f"{slugify(instance.name)}-{uuid.uuid4()}" + pathlib.Path(filename).suffix
+    return pathlib.Path(f"upload/{instance._meta.model_name}/{filename}") / pathlib.Path(filename)
 
 
 class Airport(models.Model):
     name = models.CharField(max_length=200)
     closest_big_city = models.CharField(max_length=200)
+    image = models.ImageField(null=True, upload_to=image_path)
+
+    class Meta:
+        verbose_name_plural = "airports"
 
     def __str__(self):
         return f"{self.name} (in/near: {self.closest_big_city})"
@@ -69,6 +82,7 @@ class Airplane(models.Model):
         on_delete=models.CASCADE,
         related_name="airplanes"
     )
+    image = models.ImageField(null=True, upload_to=image_path)
 
     class Meta:
         verbose_name_plural = "airplanes"
