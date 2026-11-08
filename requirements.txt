@@ -7,3 +7,4 @@ pillow==12.3.0
 psycopg[binary]==3.2.13
 flake8==7.3.0
 black==26.10.0
+python-dotenv

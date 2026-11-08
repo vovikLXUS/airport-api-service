@@ -1,6 +1,4 @@
-from django.db.models import prefetch_related_objects
-from django.shortcuts import render
-from rest_framework import viewsets, mixins
+from rest_framework import mixins
 from rest_framework.viewsets import GenericViewSet
 
 from airport.models import (
@@ -21,9 +19,17 @@ from airport.serializers import (
     AirplaneSerializer,
     FlightSerializer,
     OrderSerializer,
-    TicketSerializer, RouteListSerializer, RouteRetrieveSerializer, CrewRetrieveSerializer, CrewListSerializer,
-    AirplaneListSerializer, AirplaneRetrieveSerializer, FlightListSerializer, FlightRetrieveSerializer,
-    TicketListSerializer, TicketRetrieveSerializer
+    TicketSerializer,
+    RouteListSerializer,
+    RouteRetrieveSerializer,
+    CrewRetrieveSerializer,
+    CrewListSerializer,
+    AirplaneListSerializer,
+    AirplaneRetrieveSerializer,
+    FlightListSerializer,
+    FlightRetrieveSerializer,
+    TicketListSerializer,
+    TicketRetrieveSerializer
 )
 
 
@@ -89,13 +95,6 @@ class AirplaneTypeViewSet(
     queryset = AirplaneType.objects.all()
     serializer_class = AirplaneTypeSerializer
 
-    def get_queryset(self):
-        queryset = self.queryset
-
-        if self.action == "retrieve":
-            queryset = queryset.select_related("airplane_type")
-        return queryset
-
 
 class AirplaneViewSet(
     mixins.CreateModelMixin,
@@ -153,6 +152,12 @@ class OrderViewSet(
 ):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class TicketViewSet(

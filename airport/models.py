@@ -32,8 +32,8 @@ class Route(models.Model):
 
     def __str__(self):
         return (
-            f"Route #{self.id}: {self.destination} -> "
-            f"{self.source} (distance={self.distance})"
+            f"Route #{self.id}: {self.source} -> "
+            f"{self.destination} (distance={self.distance})"
         )
 
 
@@ -143,6 +143,6 @@ class Ticket(models.Model):
 
     def __str__(self):
         return (
-            f"Ticket {self.id}(order {'order'.id}) - "
+            f"Ticket {self.id}(order {self.order.id}) - "
             f"(row/seat: {self.row}/{self.seat})"
         )
