@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.text import slugify
 
@@ -53,6 +54,16 @@ class Route(models.Model):
 
     class Meta:
         verbose_name_plural = "routes"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(source=models.F("destination")),
+                name="route_source_differs_from_destination",
+            ),
+            models.UniqueConstraint(
+                fields=["source", "destination"],
+                name="unique_route_direction",
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -77,7 +88,8 @@ class AirplaneType(models.Model):
     name = models.CharField(
         max_length=200,
         null=False,
-        blank=False
+        blank=False,
+        unique=True
     )
 
     def __str__(self):
@@ -86,8 +98,12 @@ class AirplaneType(models.Model):
 
 class Airplane(models.Model):
     name = models.CharField(max_length=200)
-    rows = models.IntegerField()
-    seats_in_row = models.IntegerField()
+    rows = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)]
+    )
+    seats_in_row = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)]
+    )
     airplane_type = models.ForeignKey(
         AirplaneType,
         on_delete=models.CASCADE,
@@ -97,6 +113,12 @@ class Airplane(models.Model):
 
     class Meta:
         verbose_name_plural = "airplanes"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rows__gte=1) & models.Q(seats_in_row__gte=1),
+                name="airplane_has_at_least_one_seat",
+            )
+        ]
 
     @property
     def seats(self):
@@ -125,10 +147,16 @@ class Flight(models.Model):
     )
     departure_time = models.DateTimeField()
     arrival_time = models.DateTimeField()
-    crew = models.ManyToManyField(Crew)
+    crew = models.ManyToManyField(Crew, related_name="flights", blank=True)
 
     class Meta:
         verbose_name_plural = "flights"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(arrival_time__gt=models.F("departure_time")),
+                name="flight_arrival_after_departure",
+            )
+        ]
 
     def __str__(self):
         return f"Flight #{self.id}(route - {self.route}; airplane - {self.airplane})"
@@ -187,10 +215,6 @@ class Ticket(models.Model):
         Ticket.validate_seat(
             self.row, self.seat, self.flight.airplane, ValidationError
         )
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
 
     def __str__(self):
         return (

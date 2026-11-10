@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -222,7 +223,7 @@ class FlightModelTests(TestCase):
         flight.crew.set([first, second])
 
         self.assertEqual(flight.crew.count(), 2)
-        self.assertIn(flight, first.flight_set.all())
+        self.assertIn(flight, first.flights.all())
 
 
 class OrderModelTests(TestCase):
@@ -271,30 +272,37 @@ class TicketModelTests(TestCase):
             row=3, seat=4, flight=self.flight, order=self.order
         )
 
-        with self.assertRaises(ValidationError):
-            Ticket.objects.create(
-                row=3, seat=4, flight=self.flight, order=self.order
-            )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Ticket.objects.create(
+                    row=3, seat=4, flight=self.flight, order=self.order
+                )
 
     def test_row_above_airplane_rows_is_rejected(self):
+        ticket = Ticket(
+            row=99, seat=1, flight=self.flight, order=self.order
+        )
+
         with self.assertRaises(ValidationError):
-            Ticket.objects.create(
-                row=99, seat=1, flight=self.flight, order=self.order
-            )
+            ticket.full_clean()
 
     def test_seat_above_seats_in_row_is_rejected(self):
+        ticket = Ticket(
+            row=1, seat=99, flight=self.flight, order=self.order
+        )
+
         with self.assertRaises(ValidationError):
-            Ticket.objects.create(
-                row=1, seat=99, flight=self.flight, order=self.order
-            )
+            ticket.full_clean()
 
     def test_zero_and_negative_values_are_rejected(self):
         for row, seat in ((0, 1), (1, 0), (-1, 1)):
             with self.subTest(row=row, seat=seat):
+                ticket = Ticket(
+                    row=row, seat=seat, flight=self.flight, order=self.order
+                )
+
                 with self.assertRaises(ValidationError):
-                    Ticket.objects.create(
-                        row=row, seat=seat, flight=self.flight, order=self.order
-                    )
+                    ticket.full_clean()
 
     def test_boundary_values_are_allowed(self):
         airplane = self.flight.airplane
@@ -309,10 +317,12 @@ class TicketModelTests(TestCase):
         self.assertIsNotNone(ticket.id)
 
     def test_error_message_names_the_wrong_field(self):
+        ticket = Ticket(
+            row=99, seat=1, flight=self.flight, order=self.order
+        )
+
         with self.assertRaises(ValidationError) as context:
-            Ticket.objects.create(
-                row=99, seat=1, flight=self.flight, order=self.order
-            )
+            ticket.full_clean()
 
         self.assertIn("row", context.exception.message_dict)
 

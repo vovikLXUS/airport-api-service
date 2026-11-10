@@ -49,7 +49,7 @@ class AirplaneSerializersTests(TestCase):
     def test_list_serializer_hides_rows_and_type(self):
         data = AirplaneListSerializer(self.airplane).data
 
-        self.assertEqual(set(data.keys()), {"id", "name", "seats"})
+        self.assertEqual(set(data.keys()), {"id", "name", "seats", "image"})
 
     def test_retrieve_serializer_nests_airplane_type(self):
         data = AirplaneRetrieveSerializer(self.airplane).data

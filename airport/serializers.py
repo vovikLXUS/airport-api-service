@@ -1,3 +1,4 @@
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from airport.models import (
@@ -65,6 +66,17 @@ class RouteSerializer(serializers.ModelSerializer):
         model = Route
         fields = ["id", "source", "destination", "distance"]
 
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        source = attrs.get("source", getattr(self.instance, "source", None))
+        destination = attrs.get("destination", getattr(self.instance, "destination", None))
+
+        if source and destination and source == destination:
+            raise serializers.ValidationError(
+                {"destination": "Destination must differ from source."}
+            )
+        return data
+
 
 class RouteListSerializer(RouteSerializer):
     class Meta:
@@ -110,9 +122,27 @@ class FlightSerializer(serializers.ModelSerializer):
         model = Flight
         fields = ["id", "route", "airplane", "departure_time", "arrival_time", "crew"]
 
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        instance = self.instance
+        departure = attrs.get(
+            "departure_time", getattr(instance, "departure_time", None)
+        )
+        arrival = attrs.get(
+            "arrival_time", getattr(instance, "arrival_time", None)
+        )
+
+        if departure and arrival and arrival <= departure:
+            raise serializers.ValidationError(
+                {
+                    "arrival_time":
+                        "Arrival time must be later than departure time."
+                }
+            )
+        return data
+
 
 class FlightListSerializer(FlightSerializer):
-    # the value comes from annotate() in FlightViewSet.get_queryset
     tickets_available = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -147,13 +177,10 @@ class FlightRetrieveSerializer(FlightSerializer):
         ]
 
 
-class OrderSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Order
-        fields = ["id", "created_at", "user"]
-
 
 class TicketSerializer(serializers.ModelSerializer):
+    """Write serializer used inside an order; the order itself is implicit."""
+
     flight = serializers.PrimaryKeyRelatedField(
         queryset=Flight.objects.select_related(
             "route__source",
@@ -161,35 +188,70 @@ class TicketSerializer(serializers.ModelSerializer):
             "airplane",
         )
     )
-    order = serializers.PrimaryKeyRelatedField(
-        queryset=Order.objects.select_related("user")
-    )
 
     class Meta:
         model = Ticket
-        fields = ["id", "row", "seat", "flight", "order"]
+        fields = ["id", "row", "seat", "flight"]
 
     def validate(self, attrs):
         data = super().validate(attrs)
+        instance = self.instance
+        row = attrs.get("row", getattr(instance, "row", None))
+        seat = attrs.get("seat", getattr(instance, "seat", None))
+        flight = attrs.get("flight", getattr(instance, "flight", None))
+
         Ticket.validate_seat(
-            attrs["row"],
-            attrs["seat"],
-            attrs["flight"].airplane,
-            serializers.ValidationError,
+            row, seat, flight.airplane, serializers.ValidationError
         )
         return data
 
 
 class TicketListSerializer(TicketSerializer):
+    flight = serializers.PrimaryKeyRelatedField(read_only=True)
+    order = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = Ticket
         fields = ["id", "row", "seat", "flight", "order"]
+
+
+class OrderShortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ["id", "created_at"]
 
 
 class TicketRetrieveSerializer(TicketSerializer):
     flight = FlightRetrieveSerializer(read_only=True)
-    order = OrderSerializer(read_only=True)
+    order = OrderShortSerializer(read_only=True)
 
     class Meta:
         model = Ticket
         fields = ["id", "row", "seat", "flight", "order"]
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    tickets = TicketSerializer(many=True, allow_empty=False)
+
+    class Meta:
+        model = Order
+        fields = ["id", "created_at", "tickets"]
+
+    def create(self, validated_data):
+        tickets_data = validated_data.pop("tickets")
+
+        try:
+            with transaction.atomic():
+                order = Order.objects.create(**validated_data)
+                for ticket_data in tickets_data:
+                    Ticket.objects.create(order=order, **ticket_data)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                {"tickets": "One of the requested seats is already taken."}
+            )
+
+        return order
+
+
+class OrderListSerializer(OrderSerializer):
+    tickets = TicketListSerializer(many=True, read_only=True)

@@ -18,6 +18,8 @@ from airport.models import (
     Route,
     Ticket,
 )
+from rest_framework.exceptions import ParseError
+
 from airport.views import params_to_ints
 
 AIRPORT_URL = reverse("airport:airport-list")
@@ -52,11 +54,13 @@ class ParamsToIntsTests(TestCase):
     def test_single_value(self):
         self.assertEqual(params_to_ints("7"), [7])
 
-    def test_ignores_non_numeric_values(self):
-        self.assertEqual(params_to_ints("1,abc,3"), [1, 3])
+    def test_non_numeric_value_is_rejected(self):
+        with self.assertRaises(ParseError):
+            params_to_ints("1,abc,3")
 
-    def test_empty_string_returns_empty_list(self):
-        self.assertEqual(params_to_ints(""), [])
+    def test_empty_string_is_rejected(self):
+        with self.assertRaises(ParseError):
+            params_to_ints("")
 
 
 class UnauthenticatedApiTests(TestCase):
@@ -600,7 +604,7 @@ class OrderViewSetTests(TestCase):
     def setUp(self):
         cache.clear()
         self.client = APIClient()
-        self.user = get_user_model().objects.create_superuser(
+        self.user = get_user_model().objects.create_user(
             "owner@test.com", "Pass12345"
         )
         self.other = get_user_model().objects.create_user(
@@ -610,6 +614,35 @@ class OrderViewSetTests(TestCase):
 
         self.own_order = Order.objects.create(user=self.user)
         self.foreign_order = Order.objects.create(user=self.other)
+
+        route = Route.objects.create(
+            source=Airport.objects.create(name="Lviv", closest_big_city="Lviv"),
+            destination=Airport.objects.create(
+                name="Frankfurt", closest_big_city="Frankfurt"
+            ),
+            distance=1040,
+        )
+        airplane = Airplane.objects.create(
+            name="Boeing 737-800",
+            rows=10,
+            seats_in_row=6,
+            airplane_type=AirplaneType.objects.create(name="Narrow-body"),
+        )
+        departure = timezone.now()
+        self.flight = Flight.objects.create(
+            route=route,
+            airplane=airplane,
+            departure_time=departure,
+            arrival_time=departure + timedelta(hours=3),
+        )
+
+    def payload(self, *seats):
+        return {
+            "tickets": [
+                {"row": row, "seat": seat, "flight": self.flight.id}
+                for row, seat in seats
+            ]
+        }
 
     def test_list_returns_only_own_orders(self):
         response = self.client.get(ORDER_URL)
@@ -623,20 +656,76 @@ class OrderViewSetTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_regular_user_can_create_order(self):
-        self.client.force_authenticate(self.other)
-
-        response = self.client.post(ORDER_URL, {"user": self.other.id})
+    def test_create_order_with_tickets(self):
+        response = self.client.post(
+            ORDER_URL, self.payload((1, 1), (1, 2)), format="json"
+        )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data["tickets"]), 2)
 
     def test_create_assigns_current_user(self):
-        response = self.client.post(ORDER_URL, {"user": self.other.id})
+        response = self.client.post(
+            ORDER_URL, self.payload((2, 1)), format="json"
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(
             Order.objects.get(id=response.data["id"]).user, self.user
         )
+
+    def test_order_without_tickets_is_rejected(self):
+        response = self.client.post(
+            ORDER_URL, {"tickets": []}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_seat_out_of_range_is_rejected(self):
+        response = self.client.post(
+            ORDER_URL, self.payload((99, 1)), format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nothing_is_saved_when_one_ticket_is_invalid(self):
+        orders_before = Order.objects.count()
+
+        self.client.post(
+            ORDER_URL, self.payload((1, 1), (99, 1)), format="json"
+        )
+
+        self.assertEqual(Order.objects.count(), orders_before)
+        self.assertEqual(Ticket.objects.count(), 0)
+
+    def test_taken_seat_is_rejected_and_nothing_is_saved(self):
+        self.client.post(ORDER_URL, self.payload((3, 3)), format="json")
+        orders_before = Order.objects.count()
+        tickets_before = Ticket.objects.count()
+
+        response = self.client.post(
+            ORDER_URL, self.payload((4, 4), (3, 3)), format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Order.objects.count(), orders_before)
+        self.assertEqual(Ticket.objects.count(), tickets_before)
+
+    def test_orders_cannot_be_updated(self):
+        response = self.client.patch(
+            reverse("airport:order-detail", args=[self.own_order.id]),
+            {"user": self.other.id},
+        )
+
+        self.assertEqual(
+            response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    def test_list_includes_tickets(self):
+        self.client.post(ORDER_URL, self.payload((5, 5)), format="json")
+
+        response = self.client.get(ORDER_URL)
+
+        self.assertIn("tickets", results(response)[0])
 
     def test_filter_by_date_from(self):
         old = Order.objects.create(user=self.user)
@@ -656,13 +745,21 @@ class OrderViewSetTests(TestCase):
 
         self.assertEqual(response.data["count"], 0)
 
+    def test_invalid_date_returns_400(self):
+        response = self.client.get(ORDER_URL, {"date_from": "garbage"})
 
-class TicketFilterTests(TestCase):
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class TicketViewSetTests(TestCase):
     def setUp(self):
         cache.clear()
         self.client = APIClient()
         self.user = get_user_model().objects.create_user(
             "tk@test.com", "Pass12345"
+        )
+        self.other = get_user_model().objects.create_user(
+            "tk-other@test.com", "Pass12345"
         )
         self.client.force_authenticate(self.user)
 
@@ -694,12 +791,49 @@ class TicketFilterTests(TestCase):
         )
         self.first_order = Order.objects.create(user=self.user)
         self.second_order = Order.objects.create(user=self.user)
+        self.foreign_order = Order.objects.create(user=self.other)
 
         self.first_ticket = Ticket.objects.create(
             row=1, seat=1, flight=self.first_flight, order=self.first_order
         )
         self.second_ticket = Ticket.objects.create(
             row=2, seat=2, flight=self.second_flight, order=self.second_order
+        )
+        self.foreign_ticket = Ticket.objects.create(
+            row=3, seat=3, flight=self.first_flight, order=self.foreign_order
+        )
+
+    def test_foreign_tickets_are_hidden(self):
+        response = self.client.get(TICKET_URL, {"limit": 100})
+
+        self.assertNotIn(self.foreign_ticket.id, ids(response))
+        self.assertEqual(response.data["count"], 2)
+
+    def test_foreign_ticket_is_not_retrievable(self):
+        response = self.client.get(
+            reverse("airport:ticket-detail", args=[self.foreign_ticket.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_tickets_are_read_only(self):
+        response = self.client.post(
+            TICKET_URL,
+            {"row": 5, "seat": 5, "flight": self.first_flight.id},
+        )
+
+        self.assertEqual(
+            response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+
+    def test_tickets_cannot_be_updated(self):
+        response = self.client.patch(
+            reverse("airport:ticket-detail", args=[self.first_ticket.id]),
+            {"seat": 6},
+        )
+
+        self.assertEqual(
+            response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
         )
 
     def test_filter_by_flight(self):
@@ -722,39 +856,17 @@ class TicketFilterTests(TestCase):
 
         self.assertEqual(ids(response), [self.second_ticket.id])
 
+    def test_non_numeric_filter_returns_400(self):
+        response = self.client.get(TICKET_URL, {"flight": "abc"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_list_returns_ids(self):
         response = self.client.get(
             TICKET_URL, {"flight": self.first_flight.id}
         )
 
         self.assertIsInstance(results(response)[0]["flight"], int)
-
-    def test_create_with_seat_out_of_range_returns_400(self):
-        response = self.client.post(
-            TICKET_URL,
-            {
-                "row": 99,
-                "seat": 1,
-                "flight": self.first_flight.id,
-                "order": self.first_order.id,
-            },
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("row", response.data)
-
-    def test_authenticated_user_can_create_ticket(self):
-        response = self.client.post(
-            TICKET_URL,
-            {
-                "row": 5,
-                "seat": 5,
-                "flight": self.first_flight.id,
-                "order": self.first_order.id,
-            },
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_retrieve_returns_nested_flight_and_order(self):
         response = self.client.get(
