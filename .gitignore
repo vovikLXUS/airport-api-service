@@ -308,3 +308,12 @@ pip-selfcheck.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,venv,visualstudiocode,pycharm+all,git
+
+# Project-specific
+media/
+files/
+staticfiles/
+static_root/
+data.json
+*.dump
+*.sql

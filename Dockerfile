@@ -1,0 +1,19 @@
+FROM python:3.14-slim
+LABEL maintainer="imvovo4kaa@gmail.com"
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN mkdir -p /files/media && \
+    adduser --disabled-password --no-create-home my_user && \
+    chown -R my_user /files/media && \
+    chmod -R 755 /files/media
+
+USER my_user

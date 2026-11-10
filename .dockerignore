@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+
+# Secrets and local config
+.env
+.env.*
+!.env.sample
+
+# Local database and dumps
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+data.json
+*.dump
+*.sql
+
+# User uploads and collected static
+media/
+files/
+staticfiles/
+static_root/
+
+# Docker
+Dockerfile
+docker-compose*.yaml
+docker-compose*.yml
+.dockerignore
+
+# Docs and misc
+README.md
+*.md
+*.log
+.DS_Store
+Thumbs.db
